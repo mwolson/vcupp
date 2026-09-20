@@ -1070,6 +1070,39 @@ Includes an `add-to-list' for load-path and optional EXTRA-CONTENT."
        pkg-desc tmp)
       (should (>= (length captured-files) 2)))))
 
+(ert-deftest vcupp-sanitize-selected-packages/strips-pos ()
+  "Symbols-with-pos are interned before `package-selected-packages' is saved."
+  (let* ((symbols-with-pos-enabled nil)
+         (pos-sym (position-symbol 'xterm-color 10))
+         (package-selected-packages (list pos-sym 'magit-section))
+         saved)
+    (should (symbol-with-pos-p pos-sym))
+    (should-not (symbolp pos-sym))
+    (vcupp--sanitize-selected-packages
+     (lambda () (setq saved package-selected-packages)))
+    (should (equal saved '(xterm-color magit-section)))
+    (should-not (cl-some #'symbol-with-pos-p saved))))
+
+(ert-deftest vcupp-selected-file-deps/emacs-31-one-arg ()
+  "Emacs 31 `package-vc--unpack-1' is called with PKG-DESC only."
+  (my-test-with-tmp-dir tmp
+    (my-test-write-el-file tmp "main.el"
+      ";;; main.el --- test -*- lexical-binding: t -*-\n;; Package-Requires: ((emacs \"29.1\"))\n(provide 'main)\n")
+    (let* ((pkg-desc (package-desc-create
+                      :name 'main
+                      :version '(1 0)
+                      :kind 'vc
+                      :dir tmp))
+           (package-vc-selected-packages
+            `((main . (:url "https://example.com"
+                       :main-file "main.el"))))
+           called-with)
+      (vcupp--selected-file-deps
+       (lambda (desc &rest extra)
+         (setq called-with (cons desc extra)))
+       pkg-desc)
+      (should (equal called-with (list pkg-desc))))))
+
 ;; ---------------------------------------------------------------------------
 ;; vcupp.el -- compile-files keyword registration
 ;; ---------------------------------------------------------------------------

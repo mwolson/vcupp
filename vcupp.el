@@ -147,21 +147,30 @@ the main package in their own `Package-Requires' header."
               ((not (alist-get name package-vc-selected-packages nil nil #'string=))))
     (push (cons name pkg-spec) package-vc-selected-packages)))
 
-(defun vcupp--selected-file-deps (orig-fn pkg-desc pkg-dir)
-  "Limit dependency scanning for PKG-DESC in PKG-DIR to selected files.
+(defun vcupp--call-unpack-1 (orig-fn pkg-desc &optional pkg-dir)
+  "Call ORIG-FN for PKG-DESC, forwarding PKG-DIR only on Emacs 30.
+Emacs 31 dropped the PKG-DIR argument from `package-vc--unpack-1'."
+  (if pkg-dir
+      (funcall orig-fn pkg-desc pkg-dir)
+    (funcall orig-fn pkg-desc)))
+
+(defun vcupp--selected-file-deps (orig-fn pkg-desc &optional pkg-dir)
+  "Limit dependency scanning for PKG-DESC to selected files.
 ORIG-FN is the original `package-vc--unpack-1' function.
+PKG-DIR is the checkout directory on Emacs 30; Emacs 31 dropped this
+argument and reads it from PKG-DESC.
 Uses only `:main-file' for scanning to avoid self-dependencies
 from extension files."
   (let ((selected-files (vcupp--dep-scan-files pkg-desc)))
     (if (not selected-files)
-        (funcall orig-fn pkg-desc pkg-dir)
+        (vcupp--call-unpack-1 orig-fn pkg-desc pkg-dir)
       (cl-letf* ((orig-directory-files (symbol-function 'directory-files))
                  ((symbol-function 'directory-files)
                   (lambda (dir &optional full match nosort count)
                     (if (and full (equal match "\\.el\\'"))
                         selected-files
                       (funcall orig-directory-files dir full match nosort count)))))
-        (funcall orig-fn pkg-desc pkg-dir)))))
+        (vcupp--call-unpack-1 orig-fn pkg-desc pkg-dir)))))
 
 (defun vcupp--skip-elpa (orig-fn dir &rest args)
   "Prevent `project-remember-projects-under' from indexing `elpa/' checkouts.
@@ -262,6 +271,26 @@ directory exclusions are applied alongside any `.elpaignore' patterns."
             (native-compile-async files))))
        (t
         (funcall orig-fn pkg-desc))))))
+
+(defun vcupp--bare-symbol (s)
+  "Return S without reader position information.
+If S is not a symbol, return it unchanged.  Uses `symbol-with-pos-p'
+so this still works when `symbols-with-pos-enabled' is nil."
+  (if (symbol-with-pos-p s)
+      (bare-symbol s)
+    s))
+
+(defun vcupp--sanitize-selected-packages (orig-fn)
+  "Strip symbol positions before persisting `package-selected-packages'.
+ORIG-FN is the original `package--save-selected-packages-1'.
+Emacs 31 sorts that list with `string<', which signals if any
+entry is a symbol-with-pos left behind by compiling a VC checkout."
+  (setq package-selected-packages
+        (mapcar #'vcupp--bare-symbol package-selected-packages))
+  (funcall orig-fn))
+
+(advice-add 'package--save-selected-packages-1 :around
+            #'vcupp--sanitize-selected-packages)
 
 (advice-add 'project-remember-projects-under :around #'vcupp--skip-elpa)
 
@@ -411,6 +440,8 @@ Called automatically by `unload-feature'."
   (advice-remove 'package-strip-rcs-id #'vcupp--handle-pre-release)
   (advice-remove 'package--compile #'vcupp--byte-compile-targets)
   (advice-remove 'package--native-compile-async #'vcupp--native-compile-targets)
+  (advice-remove 'package--save-selected-packages-1
+                 #'vcupp--sanitize-selected-packages)
   nil)
 
 (provide 'vcupp)

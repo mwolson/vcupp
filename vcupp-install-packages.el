@@ -166,18 +166,21 @@ directly and therefore bypasses `vcupp--save-spec-early'."
 (defvar vcupp-install-packages--pre-upgrade-revs nil
   "Hash table mapping package names to HEAD revisions before upgrade.")
 
-(defun vcupp-install-packages--skip-unchanged-unpack (orig-fn pkg-desc pkg-dir)
+(defun vcupp-install-packages--skip-unchanged-unpack (orig-fn pkg-desc &optional pkg-dir)
   "Skip `package-vc--unpack-1' when HEAD has not changed.
-ORIG-FN, PKG-DESC, and PKG-DIR are forwarded when the package has
-new commits."
+ORIG-FN, PKG-DESC, and optional PKG-DIR are forwarded when the
+package has new commits.  Emacs 31 dropped PKG-DIR from
+`package-vc--unpack-1'."
   (let* ((name (package-desc-name pkg-desc))
          (old-rev (gethash name vcupp-install-packages--pre-upgrade-revs))
-         (default-directory pkg-dir)
+         (default-directory (or pkg-dir (package-desc-dir pkg-desc)))
          (new-rev (ignore-errors
                     (car (process-lines "git" "rev-parse" "HEAD")))))
     (unless (and old-rev new-rev (string= old-rev new-rev))
       (message "  %s: upgraded" name)
-      (funcall orig-fn pkg-desc pkg-dir))))
+      (if pkg-dir
+          (funcall orig-fn pkg-desc pkg-dir)
+        (funcall orig-fn pkg-desc)))))
 
 (defun vcupp-install-packages--upgrade-vc-packages ()
   "Pull latest commits for all VC packages synchronously.
