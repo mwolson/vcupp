@@ -1079,7 +1079,10 @@ Includes an `add-to-list' for load-path and optional EXTRA-CONTENT."
     (should (symbol-with-pos-p pos-sym))
     (should-not (symbolp pos-sym))
     (vcupp--sanitize-selected-packages
-     (lambda () (setq saved package-selected-packages)))
+     (lambda (&optional value)
+       (when value
+         (setq package-selected-packages value))
+       (setq saved package-selected-packages)))
     (should (equal saved '(xterm-color magit-section)))
     (should-not (cl-some #'symbol-with-pos-p saved))))
 

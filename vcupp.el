@@ -280,16 +280,19 @@ so this still works when `symbols-with-pos-enabled' is nil."
       (bare-symbol s)
     s))
 
-(defun vcupp--sanitize-selected-packages (orig-fn)
+(defun vcupp--sanitize-selected-packages (orig-fn &optional value)
   "Strip symbol positions before persisting `package-selected-packages'.
-ORIG-FN is the original `package--save-selected-packages-1'.
+ORIG-FN is the original `package--save-selected-packages'.
+VALUE is the optional new list of selected packages.
 Emacs 31 sorts that list with `string<', which signals if any
 entry is a symbol-with-pos left behind by compiling a VC checkout."
+  (when value
+    (setq value (mapcar #'vcupp--bare-symbol value)))
   (setq package-selected-packages
         (mapcar #'vcupp--bare-symbol package-selected-packages))
-  (funcall orig-fn))
+  (funcall orig-fn value))
 
-(advice-add 'package--save-selected-packages-1 :around
+(advice-add 'package--save-selected-packages :around
             #'vcupp--sanitize-selected-packages)
 
 (advice-add 'project-remember-projects-under :around #'vcupp--skip-elpa)
@@ -440,7 +443,7 @@ Called automatically by `unload-feature'."
   (advice-remove 'package-strip-rcs-id #'vcupp--handle-pre-release)
   (advice-remove 'package--compile #'vcupp--byte-compile-targets)
   (advice-remove 'package--native-compile-async #'vcupp--native-compile-targets)
-  (advice-remove 'package--save-selected-packages-1
+  (advice-remove 'package--save-selected-packages
                  #'vcupp--sanitize-selected-packages)
   nil)
 
