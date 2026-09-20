@@ -1,6 +1,6 @@
 {
   "name": "vcupp",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "Better use-package :vc support for Emacs",
   "type": "module",
   "keywords": [],
